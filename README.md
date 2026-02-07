@@ -32,9 +32,9 @@
 
 `git clone https://github.com/erfanesmizadh/WireGuard-private.git`
 
-`cd WireGuard-private
+`cd WireGuard-private`
 
-chmod +x install.sh`
+`chmod +x install.sh`
 
 اجرای اسکریپت:
 
