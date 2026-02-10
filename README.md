@@ -25,3 +25,11 @@
 ```bash
 wget https://github.com/erfanesmizadh/WireGuard-private/raw/main/install.sh -O install.sh
 chmod +x install.sh
+
+
+---
+
+### دستور مستقیم برای اجرا (یک خطی)
+
+```bash
+wget https://github.com/erfanesmizadh/WireGuard-private/raw/main/install.sh -O install.sh && chmod +x install.sh && sudo ./install.sh
