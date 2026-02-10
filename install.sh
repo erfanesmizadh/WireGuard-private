@@ -1,98 +1,176 @@
-#!/usr/bin/env bash
-set -e
+#!/bin/bash
+# ===============================================
+# 🎯 WireGuard Full Manager (Iran & Outside)
+# ===============================================
 
-echo "🔥 WireGuard Auto Setup Script (Iran / Outside Server) 🔥"
-echo ""
+# رنگ‌ها
+GREEN="\e[32m"
+YELLOW="\e[33m"
+BLUE="\e[34m"
+CYAN="\e[36m"
+RED="\e[31m"
+PURPLE="\e[35m"
+RESET="\e[0m"
 
-# --- سوال از کاربر برای مشخص کردن نوع سرور ---
-read -p "سرور شما کجاست؟ [iran/outside]: " SERVER_TYPE
-SERVER_TYPE=${SERVER_TYPE,,}  # lowercase
-
-# --- نصب WireGuard ---
-echo "📦 نصب WireGuard..."
-sudo apt update
-sudo apt install -y wireguard
-
-# --- مسیر ذخیره کلیدها ---
 KEY_DIR="/etc/wireguard"
-sudo mkdir -p $KEY_DIR
 
-# --- تولید یا استفاده از کلیدها ---
-if [ "$SERVER_TYPE" == "iran" ]; then
-    PRIVATE_KEY_FILE="$KEY_DIR/iran_private.key"
-    PUBLIC_KEY_FILE="$KEY_DIR/iran_public.key"
-    PEER_PUBLIC_KEY_FILE="$KEY_DIR/outside_public.key"
-elif [ "$SERVER_TYPE" == "outside" ]; then
-    PRIVATE_KEY_FILE="$KEY_DIR/outside_private.key"
-    PUBLIC_KEY_FILE="$KEY_DIR/outside_public.key"
-    PEER_PUBLIC_KEY_FILE="$KEY_DIR/iran_public.key"
-else
-    echo "نوع سرور نامعتبر است! باید 'iran' یا 'outside' باشد."
-    exit 1
-fi
+clear
+echo -e "${CYAN}====================================${RESET}"
+echo -e "${GREEN}   🎉 WireGuard Full Manager 🎉   ${RESET}"
+echo -e "${CYAN}====================================${RESET}\n"
 
-# --- تولید کلیدها اگر موجود نیستند ---
-if [ ! -f "$PRIVATE_KEY_FILE" ]; then
-    echo "🔑 تولید کلید خصوصی و عمومی..."
-    sudo wg genkey | sudo tee $PRIVATE_KEY_FILE | sudo wg pubkey | sudo tee $PUBLIC_KEY_FILE
-else
-    echo "کلیدها قبلاً موجود است."
-fi
+# =============================
+# نصب WireGuard
+# =============================
+install_wireguard() {
+    echo -e "${BLUE}🚀 نصب WireGuard روی سیستم...${RESET}"
+    sudo apt update && sudo apt install -y wireguard
+    echo -e "${GREEN}✅ نصب کامل شد!${RESET}"
+    sleep 1
+}
 
-# نمایش کلیدها
-echo "کلید خصوصی:"
-sudo cat $PRIVATE_KEY_FILE
-echo "کلید عمومی:"
-sudo cat $PUBLIC_KEY_FILE
+# =============================
+# ساخت کلید
+# =============================
+create_keys() {
+    SERVER=$1  # iran یا outside
+    echo -e "${YELLOW}🔑 ساخت کلید برای $SERVER...${RESET}"
+    sudo mkdir -p $KEY_DIR
+    sudo wg genkey | tee $KEY_DIR/${SERVER}_private.key | wg pubkey > $KEY_DIR/${SERVER}_public.key
+    echo -e "${GREEN}✅ کلیدها ساخته شدند:${RESET}"
+    echo -e "Private Key: $(sudo cat $KEY_DIR/${SERVER}_private.key)"
+    echo -e "Public Key:  $(sudo cat $KEY_DIR/${SERVER}_public.key)"
+    sleep 2
+}
 
-# --- سوال برای کلید عمومی Peer ---
-read -p "کلید عمومی سرور مقابل را وارد کنید: " PEER_PUBLIC_KEY
+# =============================
+# پیکربندی ایران
+# =============================
+config_iran() {
+    echo -e "${CYAN}🌍 پیکربندی WireGuard ایران${RESET}"
+    read -p "کلید خصوصی ایران: " PRIV_KEY
+    read -p "کلید عمومی خارج: " PUB_KEY
+    read -p "Address (مثال: 10.200.100.2/30, fd5a:40cb:954c::2/64): " ADDR
+    read -p "ListenPort (مثال: 51820): " PORT
+    read -p "MTU (مثال: 1372): " MTU
+    read -p "Endpoint خارج (مثال: 5.57.38.140:51820): " ENDPOINT
 
-# --- سوال برای IP ها ---
-read -p "آدرس IP محلی (مثال: 172.21.31.2/30 برای ایران، 172.21.31.1/30 برای خارج): " LOCAL_IP
-read -p "آدرس IP Peer (مثال: 172.21.31.1/32 برای ایران، 172.21.31.2/32 برای خارج): " PEER_IP
-
-# --- سوال برای IPv6 (اختیاری) ---
-read -p "آدرس IPv6 محلی (مثال: fd5a:40cb:954c::2/64) یا خالی برای نادیده گرفتن: " LOCAL_IPV6
-read -p "آدرس IPv6 Peer (مثال: fd5a:40cb:954c::1/128) یا خالی برای نادیده گرفتن: " PEER_IPV6
-
-# --- سوال برای پورت ---
-read -p "پورت WireGuard (مثال: 51820): " WG_PORT
-
-# --- سوال برای Endpoint ---
-if [ "$SERVER_TYPE" == "iran" ]; then
-    read -p "آدرس IP یا دامنه سرور خارج: " PEER_ENDPOINT
-elif [ "$SERVER_TYPE" == "outside" ]; then
-    read -p "آدرس IP یا دامنه سرور ایران: " PEER_ENDPOINT
-fi
-
-# --- ساخت فایل کانفیگ ---
-CONFIG_FILE="$KEY_DIR/wg-$SERVER_TYPE.conf"
-echo "ساخت فایل کانفیگ: $CONFIG_FILE"
-
-sudo bash -c "cat > $CONFIG_FILE <<EOF
+    sudo tee $KEY_DIR/wg-iran.conf > /dev/null <<EOL
 [Interface]
-PrivateKey = $(sudo cat $PRIVATE_KEY_FILE)
-Address = $LOCAL_IP$( [ -n "$LOCAL_IPV6" ] && echo ", $LOCAL_IPV6" )
-ListenPort = $WG_PORT
-MTU = 1372
+PrivateKey = $PRIV_KEY
+Address = $ADDR
+ListenPort = $PORT
+MTU = $MTU
+Table = off
 
 [Peer]
-PublicKey = $PEER_PUBLIC_KEY
-AllowedIPs = $PEER_IP$( [ -n "$PEER_IPV6" ] && echo ", $PEER_IPV6" )
-Endpoint = $PEER_ENDPOINT:$WG_PORT
+PublicKey = $PUB_KEY
+AllowedIPs = 10.200.100.1/32, fd5a:40cb:954c::1/128
+Endpoint = $ENDPOINT
 PersistentKeepalive = 25
-EOF"
+EOL
 
-echo "✅ فایل کانفیگ ساخته شد."
+    echo -e "${GREEN}✅ فایل wg-iran.conf ساخته شد${RESET}"
+    sleep 1
+}
 
-# --- فعال کردن تونل ---
-echo "فعال کردن WireGuard..."
-sudo wg-quick up wg-$SERVER_TYPE
-sudo systemctl enable wg-quick@wg-$SERVER_TYPE
+# =============================
+# پیکربندی خارج
+# =============================
+config_outside() {
+    echo -e "${CYAN}🌍 پیکربندی WireGuard خارج${RESET}"
+    read -p "کلید خصوصی خارج: " PRIV_KEY
+    read -p "کلید عمومی ایران: " PUB_KEY
+    read -p "Address (مثال: 10.200.100.1/30, fd5a:40cb:954c::1/64): " ADDR
+    read -p "ListenPort (مثال: 51820): " PORT
+    read -p "MTU (مثال: 1372): " MTU
+    read -p "Endpoint ایران (مثال: 172.239.109.73:51820): " ENDPOINT
 
-# --- نمایش وضعیت ---
-echo "وضعیت WireGuard:"
-sudo wg show
+    sudo tee $KEY_DIR/wg-outside.conf > /dev/null <<EOL
+[Interface]
+PrivateKey = $PRIV_KEY
+Address = $ADDR
+ListenPort = $PORT
+MTU = $MTU
+Table = off
 
-echo "🎉 نصب و کانفیگ WireGuard کامل شد."
+[Peer]
+PublicKey = $PUB_KEY
+AllowedIPs = 10.200.100.2/32, fd5a:40cb:954c::2/128
+Endpoint = $ENDPOINT
+PersistentKeepalive = 25
+EOL
+
+    echo -e "${GREEN}✅ فایل wg-outside.conf ساخته شد${RESET}"
+    sleep 1
+}
+
+# =============================
+# مدیریت سرویس
+# =============================
+manage_wg() {
+    echo -e "${PURPLE}🔧 مدیریت سرویس WireGuard${RESET}"
+    echo "1) روشن کردن ایران"
+    echo "2) خاموش کردن ایران"
+    echo "3) ریستارت ایران"
+    echo "4) روشن کردن خارج"
+    echo "5) خاموش کردن خارج"
+    echo "6) ریستارت خارج"
+    read -p "انتخاب شما: " WG_OPT
+
+    case $WG_OPT in
+        1) sudo wg-quick up wg-iran;;
+        2) sudo wg-quick down wg-iran;;
+        3) sudo wg-quick down wg-iran; sudo wg-quick up wg-iran;;
+        4) sudo wg-quick up wg-outside;;
+        5) sudo wg-quick down wg-outside;;
+        6) sudo wg-quick down wg-outside; sudo wg-quick up wg-outside;;
+        *) echo -e "${RED}گزینه نامعتبر!${RESET}";;
+    esac
+    sleep 1
+}
+
+# =============================
+# نمایش کلیدها
+# =============================
+show_keys() {
+    echo -e "${CYAN}🗝️ نمایش کلیدها${RESET}"
+    for SERVER in iran outside; do
+        echo -e "${YELLOW}--- $SERVER ---${RESET}"
+        [ -f $KEY_DIR/${SERVER}_private.key ] && echo -e "Private Key: $(sudo cat $KEY_DIR/${SERVER}_private.key)" || echo "Private Key: ندارد"
+        [ -f $KEY_DIR/${SERVER}_public.key ] && echo -e "Public Key:  $(sudo cat $KEY_DIR/${SERVER}_public.key)" || echo "Public Key: ندارد"
+        echo ""
+    done
+    read -p "برای ادامه Enter را بزنید..."
+}
+
+# =============================
+# منو اصلی
+# =============================
+while true; do
+    clear
+    echo -e "${CYAN}==============================${RESET}"
+    echo -e "${GREEN}   🛠 WireGuard Full Menu 🛠   ${RESET}"
+    echo -e "${CYAN}==============================${RESET}"
+    echo -e "${YELLOW}1) نصب WireGuard"
+    echo -e "2) ساخت کلید ایران"
+    echo -e "3) ساخت کلید خارج"
+    echo -e "4) پیکربندی ایران"
+    echo -e "5) پیکربندی خارج"
+    echo -e "6) مدیریت سرویس WireGuard"
+    echo -e "7) نمایش کلیدها"
+    echo -e "q) خروج${RESET}"
+    read -p "انتخاب شما: " CHOICE
+
+    case $CHOICE in
+        1) install_wireguard;;
+        2) create_keys iran;;
+        3) create_keys outside;;
+        4) config_iran;;
+        5) config_outside;;
+        6) manage_wg;;
+        7) show_keys;;
+        q|Q) exit 0;;
+        *) echo -e "${RED}گزینه نامعتبر!${RESET}"; sleep 1;;
+    esac
+done
